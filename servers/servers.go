@@ -5,16 +5,19 @@ import (
     "log"
     "strings"
     "strconv"
+    "encoding/json"
     "github.com/valyala/fasthttp"
     "github.com/go-redis/redis"
     MUXerrors "github.com/AllesMUX/MUXbalancer/errors"
+    MUXworkerStructs "github.com/AllesMUX/MUXworker/structs" 
 )
 
 type Server struct {
-    Key      string
-    Protocol string
-    Addr     string
-    Port     string
+    Key        string
+    Protocol   string
+    Addr       string
+    Port       string
+    WorkerPort string
 }
 
 type ServerManager struct {
@@ -45,9 +48,10 @@ func (sm *ServerManager) AddServer(s *Server) error {
     lastKey, _ := strconv.Atoi(strings.Split(allServerKeys[len(allServerKeys)-1], ":")[1])
     key := fmt.Sprintf("server:%d", lastKey+1)
     serverMap := map[string]interface{}{
-        "protocol": s.Protocol,
-        "addr":     s.Addr,
-        "port":     s.Port,
+        "protocol":    s.Protocol,
+        "addr":        s.Addr,
+        "port":        s.Port,
+        "worker_port": s.WorkerPort,
     }
     err := sm.redisClient.HMSet(key, serverMap).Err()
     if err != nil {
@@ -87,6 +91,7 @@ func (sm *ServerManager) LoadServers() error {
                 Protocol: result["protocol"],
                 Addr: result["addr"],
                 Port: result["port"],
+                WorkerPort: result["worker_port"],
             }
             sm.servers = append(sm.servers, &server)
         }
@@ -94,6 +99,28 @@ func (sm *ServerManager) LoadServers() error {
     return nil
 }
 
+func (sm *ServerManager) GetServerHealth(s Server, endpoint string) MUXworkerStructs.ServerStatusJSON {
+    url := fmt.Sprintf("%s://%s:%s/%s", s.Protocol, s.Addr, s.WorkerPort, endpoint)
+
+    req := fasthttp.AcquireRequest()
+    defer fasthttp.ReleaseRequest(req)
+
+    req.SetRequestURI(url)
+    req.Header.SetMethod("GET")
+
+    resp := fasthttp.AcquireResponse()
+    defer fasthttp.ReleaseResponse(resp)
+
+    if err := fasthttp.Do(req, resp); err != nil {
+        log.Fatalf("error in fasthttp request: %s", err)
+    }
+
+    var r MUXworkerStructs.ServerStatusJSON
+    if err := json.Unmarshal(resp.Body(), &r); err != nil {
+        log.Fatalf("error in json unmarshal: %s", err)
+    }
+    return r
+}
 
 
 func (s *Server) handleRequest(ctx *fasthttp.RequestCtx) {

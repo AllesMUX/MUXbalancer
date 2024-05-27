@@ -60,6 +60,10 @@ func main() {
     }
     
     /*
+    serverHealth := workingServers.GetServerHealth(*workingServers.GetServerByIndex(0), appConfig.Worker.HealthEndpoint)
+    fmt.Println(serverHealth.CPULoadAvg)
+    */
+    /*
     err = workingServers.AddServer(&servers.Server{
         Key: "testt",
         Protocol: "http",

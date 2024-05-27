@@ -1,5 +1,9 @@
 package config
 
+type WorkerConfig struct {
+    HealthEndpoint string `yaml:"health"`
+}
+
 type AppConfig struct {
     Serve      string `yaml:"serve"`
     Port       int    `yaml:"port"`
@@ -17,4 +21,5 @@ type RedisConfig struct {
 type Config struct {
     App    AppConfig  `yaml:"app"`
     Redis  RedisConfig `yaml:"redis"`
+    Worker WorkerConfig  `yaml:"worker"`
 }

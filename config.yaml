@@ -1,3 +1,6 @@
+worker:
+  health: /server-health
+
 app:
   serve: http # socket or http
   port: 4999
