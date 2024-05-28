@@ -58,7 +58,10 @@ func main() {
     if err != nil {
         panic(err)
     }
-    
+    /*
+    s := workingServers.GetLowestLoadedServer()
+    println(s.Port)
+    */
     /*
     serverHealth := workingServers.GetServerHealth(*workingServers.GetServerByIndex(0), appConfig.Worker.HealthEndpoint)
     fmt.Println(serverHealth.CPULoadAvg)
@@ -93,25 +96,26 @@ func main() {
             sess = &session{server: srv, expiry: time.Now().Add(time.Duration(appConfig.App.SessionLifetime * int(time.Second)))}
             setSession(ctx, sess)
         }
-
-        ctx.Request.SetRequestURI(sess.server.Addr + string(ctx.Path()))
-        fmt.Println(sess.server.Addr)
-        req := fasthttp.AcquireRequest()
-        
-        defer fasthttp.ReleaseRequest(req)
-    
-        ctx.Request.CopyTo(req)
-    
-        req.SetRequestURI(sess.server.Protocol + "://" + sess.server.Addr + ":" + sess.server.Port)
-    
-        resp := fasthttp.AcquireResponse()
-        defer fasthttp.ReleaseResponse(resp)
-    
-        if err := fasthttp.Do(req, resp); err != nil {
-            ctx.Error("Internal Server Error", fasthttp.StatusInternalServerError)
+        needLL := false
+        for _, b := range appConfig.Worker.Balance {
+            if b.Path == string(ctx.Path()) && b.Method == string(ctx.Method()) {
+                needLL = true
+                break
+            }
+        }
+        if needLL {
+            sess.server = workingServers.GetLowestLoadedServer()
+        }
+        serverURI := sess.server.Addr + ":" + sess.server.Port
+        var proxyClient = &fasthttp.HostClient{
+		  Addr:                   serverURI,
+		  IsTLS:                  sess.server.Protocol == "https",
+		  ReadBufferSize:         8192,
+	    }
+        if err := proxyClient.Do(&ctx.Request, &ctx.Response); err != nil {
+            ctx.Error(fmt.Sprintf("Internal Server Error: %s", err), fasthttp.StatusInternalServerError)
             return
         }
-        resp.CopyTo(&ctx.Response)
     }
     
     if appConfig.App.Serve == "http" {

@@ -1,7 +1,13 @@
 package config
 
+type Balance struct {
+    Path   string `yaml:"path"`
+    Method  string `yaml:"method"`
+}
+
 type WorkerConfig struct {
     HealthEndpoint string `yaml:"health"`
+    Balance []Balance `yaml:"balance"`
 }
 
 type AppConfig struct {

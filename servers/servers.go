@@ -5,6 +5,7 @@ import (
     "log"
     "strings"
     "strconv"
+    "sync"
     "encoding/json"
     "github.com/valyala/fasthttp"
     "github.com/go-redis/redis"
@@ -24,6 +25,11 @@ type ServerManager struct {
     RedisOptions *redis.Options
     redisClient *redis.Client
     servers []*Server
+}
+
+type ServerHealthStatus struct {
+    server Server
+    health MUXworkerStructs.ServerStatusJSON
 }
 
 func (sm *ServerManager) GetServersCount() int {
@@ -99,6 +105,12 @@ func (sm *ServerManager) LoadServers() error {
     return nil
 }
 
+type httpResponse struct {
+    url      string
+    response *fasthttp.Response
+    err      error
+}
+
 func (sm *ServerManager) GetServerHealth(s Server, endpoint string) MUXworkerStructs.ServerStatusJSON {
     url := fmt.Sprintf("%s://%s:%s/%s", s.Protocol, s.Addr, s.WorkerPort, endpoint)
 
@@ -120,6 +132,45 @@ func (sm *ServerManager) GetServerHealth(s Server, endpoint string) MUXworkerStr
         log.Fatalf("error in json unmarshal: %s", err)
     }
     return r
+}
+
+
+func (sm *ServerManager) GetLowestLoadedServer() *Server {
+    ch := make(chan *ServerHealthStatus)
+    wg := sync.WaitGroup{}
+
+    for _, srv := range sm.servers {
+        wg.Add(1)
+        go func(srv Server) {
+            defer wg.Done()
+            s := ServerHealthStatus{
+                server: srv,
+                health: sm.GetServerHealth(srv, "server-health"),
+            }
+            ch <- &s
+        }(*srv)
+    }
+
+    go func() {
+        wg.Wait()
+        close(ch)
+    }()
+
+    lowestLoaded := ServerHealthStatus{}
+    var tmp = false
+    for res := range ch {
+        if tmp == false {
+            lowestLoaded = *res
+            tmp = true
+        } else {
+            if lowestLoaded.health.ActiveTasks > res.health.ActiveTasks {
+                lowestLoaded = *res
+            } else if lowestLoaded.health.CPULoadAvg > res.health.CPULoadAvg {
+                lowestLoaded = *res
+            }
+        }
+    }
+    return &lowestLoaded.server
 }
 
 
