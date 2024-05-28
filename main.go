@@ -95,6 +95,7 @@ func main() {
             current = (current + 1) % workingServers.GetServersCount()
             sess = &session{server: srv, expiry: time.Now().Add(time.Duration(appConfig.App.SessionLifetime * int(time.Second)))}
             setSession(ctx, sess)
+            fmt.Printf("New user using RR balance. Selected server is %s:%s\n", sess.server.Addr, sess.server.Port)
         }
         needLL := false
         for _, b := range appConfig.Worker.Balance {
@@ -105,6 +106,7 @@ func main() {
         }
         if needLL {
             sess.server = workingServers.GetLowestLoadedServer()
+            fmt.Printf("New balancing request using LL balance. Selected server is %s:%s\n", sess.server.Addr, sess.server.Port)
         }
         serverURI := sess.server.Addr + ":" + sess.server.Port
         var proxyClient = &fasthttp.HostClient{
@@ -119,12 +121,12 @@ func main() {
     }
     
     if appConfig.App.Serve == "http" {
-        log.Printf("Starting on http://0.0.0.0:%d\n", appConfig.App.Port)
+        log.Printf("MUXbalancer starting on http://0.0.0.0:%d\n", appConfig.App.Port)
         if err := fasthttp.ListenAndServe(fmt.Sprintf(":%d",appConfig.App.Port), lb); err != nil {
             log.Fatalf("error in fasthttp server: %s", err)
         }
     } else if appConfig.App.Serve == "socket" {
-	    log.Printf("Starting on http://unix:%s\n", appConfig.App.Socket)
+	    log.Printf("MUXbalancer starting on http://unix:%s\n", appConfig.App.Socket)
         if _, err := os.Stat(appConfig.App.Socket); err == nil {
             os.Remove(appConfig.App.Socket)
         }
