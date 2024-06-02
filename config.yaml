@@ -15,3 +15,7 @@ redis:
   addr: 127.0.0.1:6379
   password:
   db: 0
+
+api:
+  port: 8558
+  token: Cc8zpRuLxXgG6wZDe5sr9hYqMkFK74nT

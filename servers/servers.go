@@ -14,11 +14,11 @@ import (
 )
 
 type Server struct {
-    Key        string
-    Protocol   string
-    Addr       string
-    Port       string
-    WorkerPort string
+    Key        string `json:"key"`
+    Protocol   string `json:"protocol"`
+    Addr       string `json:"addr"`
+    Port       string `json:"port"`
+    WorkerPort string `json:"worker_port"`
 }
 
 type ServerManager struct {
@@ -28,8 +28,31 @@ type ServerManager struct {
 }
 
 type ServerHealthStatus struct {
-    server Server
-    health MUXworkerStructs.ServerStatusJSON
+    Server Server `json:"server"`
+    Health MUXworkerStructs.ServerStatusJSON `json:"health"`
+}
+
+func (sm *ServerManager) askAllServersHealth() chan *ServerHealthStatus {
+    ch := make(chan *ServerHealthStatus)
+    wg := sync.WaitGroup{}
+
+    for _, srv := range sm.servers {
+        wg.Add(1)
+        go func(srv Server) {
+            defer wg.Done()
+            s := ServerHealthStatus{
+                Server: srv,
+                Health: sm.GetServerHealth(srv, "server-health"),
+            }
+            ch <- &s
+        }(*srv)
+    }
+
+    go func() {
+        wg.Wait()
+        close(ch)
+    }()
+    return ch
 }
 
 func (sm *ServerManager) GetServersCount() int {
@@ -42,6 +65,13 @@ func (sm *ServerManager) GetServerByIndex(index int) *Server {
 
 func (sm *ServerManager) GetServers() []*Server {
     return sm.servers
+}
+func (sm *ServerManager) GetServersWithHealth() []ServerHealthStatus  {
+    var servers []ServerHealthStatus
+    for server := range sm.askAllServersHealth() {
+        servers = append(servers, *server)
+    }
+    return servers
 }
 
 func (sm *ServerManager) AddServer(s *Server) error {
@@ -135,27 +165,9 @@ func (sm *ServerManager) GetServerHealth(s Server, endpoint string) MUXworkerStr
 }
 
 
+
 func (sm *ServerManager) GetLowestLoadedServer() *Server {
-    ch := make(chan *ServerHealthStatus)
-    wg := sync.WaitGroup{}
-
-    for _, srv := range sm.servers {
-        wg.Add(1)
-        go func(srv Server) {
-            defer wg.Done()
-            s := ServerHealthStatus{
-                server: srv,
-                health: sm.GetServerHealth(srv, "server-health"),
-            }
-            ch <- &s
-        }(*srv)
-    }
-
-    go func() {
-        wg.Wait()
-        close(ch)
-    }()
-
+    ch := sm.askAllServersHealth()
     lowestLoaded := ServerHealthStatus{}
     var tmp = false
     for res := range ch {
@@ -163,14 +175,14 @@ func (sm *ServerManager) GetLowestLoadedServer() *Server {
             lowestLoaded = *res
             tmp = true
         } else {
-            if lowestLoaded.health.ActiveTasks > res.health.ActiveTasks {
+            if lowestLoaded.Health.ActiveTasks > res.Health.ActiveTasks {
                 lowestLoaded = *res
-            } else if lowestLoaded.health.CPULoadAvg > res.health.CPULoadAvg {
+            } else if lowestLoaded.Health.CPULoadAvg > res.Health.CPULoadAvg {
                 lowestLoaded = *res
             }
         }
     }
-    return &lowestLoaded.server
+    return &lowestLoaded.Server
 }
 
 

@@ -24,8 +24,14 @@ type RedisConfig struct {
     DB    int    `yaml:"db"`
 }
 
+type ApiConfig struct {
+    Token  string `yaml:"token"`
+    Port       int    `yaml:"port"`
+}
+
 type Config struct {
     App    AppConfig  `yaml:"app"`
     Redis  RedisConfig `yaml:"redis"`
     Worker WorkerConfig  `yaml:"worker"`
+    API    ApiConfig  `yaml:"api"`
 }

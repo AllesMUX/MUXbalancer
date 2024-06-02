@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 
+	"encoding/json"
+	
 	"github.com/google/uuid"
 
 	"github.com/valyala/fasthttp"
@@ -78,6 +80,49 @@ func main() {
     }
     workingServers.InitTestServers()
     */
+    api := func(ctx *fasthttp.RequestCtx) {
+        reqToken := ctx.Request.Header.Peek("Authorization")
+        if string(reqToken) != "Bearer "+appConfig.API.Token  {
+            ctx.SetStatusCode(fasthttp.StatusUnauthorized)
+            ctx.SetContentType("application/json")
+            ctx.WriteString(`{"error":"invalid API key"}`)
+            return
+        }
+        
+        
+        var response map[string]interface{}
+    
+        message := string(ctx.QueryArgs().Peek("method"))
+        //data := string(ctx.QueryArgs().Peek("data"))
+        switch message {
+            case "servers_list":
+                response = map[string]interface{}{
+                    "data": workingServers.GetServers(),
+                }
+            case "servers_list_health":
+                response = map[string]interface{}{
+                    "data": workingServers.GetServersWithHealth(),
+                }
+            default:
+                response = map[string]interface{}{
+                    "error": "invalid type",
+                }
+        }
+    
+        jsonResponse, err := json.Marshal(response)
+        if err != nil {
+            ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+            ctx.SetContentType("application/json")
+            ctx.WriteString(fmt.Sprintf(`{"error":"server error - %s"}`, err))
+            return
+        }
+    
+        ctx.SetStatusCode(fasthttp.StatusOK)
+        ctx.SetContentType("application/json")
+        ctx.Write(jsonResponse)
+    }
+    log.Printf("MUXbalancer API starting on http://0.0.0.0:%d\n", appConfig.API.Port)
+    go fasthttp.ListenAndServe(fmt.Sprintf(":%d",appConfig.API.Port), api)
 
     var current int
     lb := func(ctx *fasthttp.RequestCtx) {
