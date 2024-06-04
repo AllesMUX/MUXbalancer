@@ -6,6 +6,7 @@ import (
     "strings"
     "strconv"
     "sync"
+    "time"
     "encoding/json"
     "github.com/valyala/fasthttp"
     "github.com/go-redis/redis"
@@ -30,7 +31,25 @@ type ServerManager struct {
 type ServerHealthStatus struct {
     Server Server `json:"server"`
     Health MUXworkerStructs.ServerStatusJSON `json:"health"`
+    Online bool `json:"online"`
 }
+
+func isOnline(endpoint string) bool {
+    req := fasthttp.AcquireRequest()
+    resp := fasthttp.AcquireResponse()
+    defer fasthttp.ReleaseRequest(req)
+    defer fasthttp.ReleaseResponse(resp)
+    req.SetRequestURI(endpoint)
+    err := fasthttp.Do(req, resp)
+    if err != nil {
+        return false
+    }
+    if resp.StatusCode() != fasthttp.StatusOK {
+        return false
+    }
+    return true
+}
+
 
 func (sm *ServerManager) askAllServersHealth() chan *ServerHealthStatus {
     ch := make(chan *ServerHealthStatus)
@@ -40,11 +59,22 @@ func (sm *ServerManager) askAllServersHealth() chan *ServerHealthStatus {
         wg.Add(1)
         go func(srv Server) {
             defer wg.Done()
-            s := ServerHealthStatus{
-                Server: srv,
-                Health: sm.GetServerHealth(srv, "server-health"),
+            r, err := sm.GetServerHealth(srv, "server-health")
+            if err != nil {
+                s := ServerHealthStatus{
+                    Server: srv,
+                    Health: r,
+                    Online: false,
+                }
+                ch <- &s
+            } else {
+                s := ServerHealthStatus{
+                    Server: srv,
+                    Health: r,
+                    Online: true,
+                }
+                ch <- &s
             }
-            ch <- &s
         }(*srv)
     }
 
@@ -141,30 +171,34 @@ type httpResponse struct {
     err      error
 }
 
-func (sm *ServerManager) GetServerHealth(s Server, endpoint string) MUXworkerStructs.ServerStatusJSON {
+func (sm *ServerManager) GetServerHealth(s Server, endpoint string) (MUXworkerStructs.ServerStatusJSON, error) {
     url := fmt.Sprintf("%s://%s:%s/%s", s.Protocol, s.Addr, s.WorkerPort, endpoint)
+    
+    client := &fasthttp.Client{
+        MaxConnDuration: 1 * time.Second,
+    }
 
     req := fasthttp.AcquireRequest()
     defer fasthttp.ReleaseRequest(req)
-
     req.SetRequestURI(url)
     req.Header.SetMethod("GET")
 
     resp := fasthttp.AcquireResponse()
     defer fasthttp.ReleaseResponse(resp)
 
-    if err := fasthttp.Do(req, resp); err != nil {
-        log.Fatalf("error in fasthttp request: %s", err)
-    }
-
     var r MUXworkerStructs.ServerStatusJSON
-    if err := json.Unmarshal(resp.Body(), &r); err != nil {
-        log.Fatalf("error in json unmarshal: %s", err)
+    
+    err := client.Do(req, resp)
+    if err != nil {
+        return r, err
     }
-    return r
+    
+    err = json.Unmarshal(resp.Body(), &r)
+    if err != nil {
+        return r, err
+    }
+    return r, nil
 }
-
-
 
 func (sm *ServerManager) GetLowestLoadedServer() *Server {
     ch := sm.askAllServersHealth()
