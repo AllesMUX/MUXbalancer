@@ -8,9 +8,8 @@ To install MUXbalancer, use the following command:
 `go get github.com/AllesMUX/MUXbalancer`
 
 ## Usage
-To use MUXworker in your worker service, first setup all your worker endpoints and request methods in `config.yaml`:
+To use MUXworker in your worker service, first setup all your worker endpoints and request methods in `config.yaml`, for example:
 ```yaml
-for example
   balance:
     - path: /process
       method: POST
