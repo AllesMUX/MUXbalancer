@@ -2,20 +2,22 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
 	"log"
 	"os"
+	"sync"
+	"time"
+	"strings"
 
 	"encoding/json"
-	
+
 	"github.com/google/uuid"
+	
 
-	"github.com/valyala/fasthttp"
 	"github.com/go-redis/redis"
+	"github.com/valyala/fasthttp"
 
-	"github.com/AllesMUX/MUXbalancer/servers"
 	"github.com/AllesMUX/MUXbalancer/config"
+	"github.com/AllesMUX/MUXbalancer/servers"
 )
 
 var appConfig = config.GetConfig("config.yaml") 
@@ -45,6 +47,16 @@ func setSession(ctx *fasthttp.RequestCtx, sess *session) {
     sessions.Lock()
     sessions.m[string(ctx.Request.Header.Cookie(appConfig.App.Cookie))] = sess
     sessions.Unlock()
+}
+
+func checkGetParams(args *fasthttp.Args, params []string) []string {
+    missingParams := []string{}
+    for _, param := range params {
+        if string(args.Peek(param)) == "" {
+            missingParams = append(missingParams, param)
+        }
+    }
+    return missingParams    
 }
 
 func main() {
@@ -89,19 +101,64 @@ func main() {
             return
         }
         
-        
         var response map[string]interface{}
     
         message := string(ctx.QueryArgs().Peek("method"))
-        //data := string(ctx.QueryArgs().Peek("data"))
         switch message {
             case "servers_list":
                 response = map[string]interface{}{
                     "data": workingServers.GetServers(),
+                    "status": true,
                 }
             case "servers_list_health":
                 response = map[string]interface{}{
                     "data": workingServers.GetServersWithHealth(),
+                    "status": true,
+                }
+            case "server_add":
+                missingParams := checkGetParams(ctx.QueryArgs(), []string{"protocol", "addr", "port", "worker_port"})
+                if len(missingParams) != 0 {
+                    response = map[string]interface{}{
+                        "error": fmt.Sprintf("Missing params: %s", strings.Join(missingParams, ", ")),
+                        "status": false,
+                    }
+                } else {
+                    protocol := string(ctx.QueryArgs().Peek("protocol"))
+                    addr := string(ctx.QueryArgs().Peek("addr"))
+                    port := string(ctx.QueryArgs().Peek("port"))
+                    workerPort := string(ctx.QueryArgs().Peek("worker_port"))
+                    err := workingServers.AddServer(&servers.Server{
+                        Protocol: protocol,
+                        Addr: addr,
+                        Port: port,
+                        WorkerPort: workerPort,
+                    })
+                    if err != nil {
+                        response = map[string]interface{}{
+                            "data": err,
+                            "status": false,
+                        }
+                    } else {
+                        response = map[string]interface{}{
+                            "data": "Server added",
+                            "status": true,
+                        }
+                    }
+                }
+            case "server_delete":
+                missingParams := checkGetParams(ctx.QueryArgs(), []string{"key"})
+                if len(missingParams) != 0 {
+                    response = map[string]interface{}{
+                        "error": fmt.Sprintf("Missing params: %s", strings.Join(missingParams, ", ")),
+                        "status": false,
+                    }
+                } else {
+                    key := string(ctx.QueryArgs().Peek("protocol"))
+                    workingServers.RemoveServer(key)
+                    response = map[string]interface{}{
+                        "data": "Server removed",
+                        "status": true,
+                    }
                 }
             default:
                 response = map[string]interface{}{
