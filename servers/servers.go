@@ -111,7 +111,22 @@ func (sm *ServerManager) AddServer(s *Server) error {
         }
     }
     allServerKeys, _, _ := sm.redisClient.Scan(0, "server:*", 0).Result()
-    lastKey, _ := strconv.Atoi(strings.Split(allServerKeys[len(allServerKeys)-1], ":")[1])
+    var lastKey int
+    if len(allServerKeys) > 0 {
+        // Find the maximum key value
+        for _, key := range allServerKeys {
+            keyValue, err := strconv.Atoi(strings.Split(key, ":")[1])
+            if err != nil {
+                log.Println("Error parsing server key:", err)
+                continue
+            }
+            if keyValue > lastKey {
+                lastKey = keyValue
+            }
+        }
+    } else {
+        lastKey = -1
+    }
     key := fmt.Sprintf("server:%d", lastKey+1)
     serverMap := map[string]interface{}{
         "protocol":    s.Protocol,
@@ -124,6 +139,7 @@ func (sm *ServerManager) AddServer(s *Server) error {
         log.Println("Can't add server in Redis:", err)
         return err
     }
+    s.Key = key
     sm.servers = append(sm.servers, s)
     return nil
 }
