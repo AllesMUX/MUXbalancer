@@ -146,16 +146,19 @@ func (sm *ServerManager) AddServer(s *Server) error {
 
 func (sm *ServerManager) RemoveServer(key string) {
     var index int
+    var found bool
     for i, server := range sm.servers {
         if server.Key == key {
             index = i
+            found = true
             break
         }
     }
-    if index == len(sm.servers) {
+    if !found {
         return
     }
     sm.servers = append(sm.servers[:index], sm.servers[index+1:]...)
+    sm.redisClient.Del(key)
 }
 
 func (sm *ServerManager) LoadServers() error {

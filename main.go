@@ -58,6 +58,16 @@ func checkGetParams(args *fasthttp.Args, params []string) []string {
     return missingParams    
 }
 
+func getRealIP(ctx *fasthttp.RequestCtx) string {
+	if ip := ctx.Request.Header.Peek("X-Real-IP"); len(ip) > 0 {
+		return string(ip)
+	}
+	if ip := ctx.Request.Header.Peek("X-Forwarded-For"); len(ip) > 0 {
+		return string(ip)
+	}
+	return ctx.RemoteIP().String()
+}
+
 func main() {
     appConfig, err := config.InitConfig()
     if err != nil {
@@ -156,7 +166,7 @@ func main() {
                         "status": false,
                     }
                 } else {
-                    key := string(ctx.QueryArgs().Peek("protocol"))
+                    key := string(ctx.QueryArgs().Peek("key"))
                     workingServers.RemoveServer(key)
                     response = map[string]interface{}{
                         "data": "Server removed",
@@ -193,6 +203,8 @@ func main() {
 	        c.SetValue(uuid.New().String())
             ctx.Response.Header.SetCookie(&c)
         }
+        realIP := getRealIP(ctx)
+		ctx.Request.Header.Set("X-Forwarded-For", realIP)
         
         sess := getSession(ctx)
         if sess == nil {
