@@ -20,8 +20,7 @@ import (
 	"github.com/AllesMUX/MUXbalancer/servers"
 )
 
-var appConfig = config.GetConfig("config.yaml") 
-
+var appConfig *config.Config
 
 type session struct {
     server *servers.Server
@@ -60,15 +59,19 @@ func checkGetParams(args *fasthttp.Args, params []string) []string {
 }
 
 func main() {
+    appConfig, err := config.InitConfig()
+    if err != nil {
+		log.Fatalf("Error initializing config: %v", err)
+	}
     workingServers := servers.ServerManager{
         RedisOptions:&redis.Options{
-            Addr: appConfig.Redis.Addr,
+            Addr: appConfig.Redis.Host+":"+appConfig.Redis.Port,
             Password: appConfig.Redis.Password,
             DB: appConfig.Redis.DB,
         },
     }
 
-    err := workingServers.LoadServers()
+    err = workingServers.LoadServers()
     if err != nil {
         panic(err)
     }

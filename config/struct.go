@@ -1,37 +1,38 @@
 package config
 
 type Balance struct {
-    Path   string `yaml:"path"`
-    Method  string `yaml:"method"`
+	Path   string `mapstructure:"path"`
+	Method string `mapstructure:"method"`
 }
 
 type WorkerConfig struct {
-    HealthEndpoint string `yaml:"health"`
-    Balance []Balance `yaml:"balance"`
+	HealthEndpoint string    `mapstructure:"health"`
+	Balance        []Balance `mapstructure:"balance"`
 }
 
 type AppConfig struct {
-    Serve      string `yaml:"serve"`
-    Port       int    `yaml:"port"`
-    Socket     string `yaml:"socket"`
-    Cookie     string `yaml:"cookie"`
-    SessionLifetime int `yaml:"session_lifetime"`
+	Serve           string `mapstructure:"serve"`
+	Port            int    `mapstructure:"port"`
+	Socket          string `mapstructure:"socket"`
+	Cookie          string `mapstructure:"cookie"`
+	SessionLifetime int    `mapstructure:"session_lifetime"`
 }
 
 type RedisConfig struct {
-    Addr  string `yaml:"addr"`
-    Password string `yaml:"password"`
-    DB    int    `yaml:"db"`
+	Host     string `mapstructure:"host"`
+	Port     string `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
 }
 
 type ApiConfig struct {
-    Token  string `yaml:"token"`
-    Port       int    `yaml:"port"`
+	Token string `mapstructure:"token"`
+	Port  int    `mapstructure:"port"`
 }
 
 type Config struct {
-    App    AppConfig  `yaml:"app"`
-    Redis  RedisConfig `yaml:"redis"`
-    Worker WorkerConfig  `yaml:"worker"`
-    API    ApiConfig  `yaml:"api"`
+	App    AppConfig    `mapstructure:"app"`
+	Redis  RedisConfig  `mapstructure:"redis"`
+	Worker WorkerConfig `mapstructure:"worker"`
+	API    ApiConfig    `mapstructure:"api"`
 }
