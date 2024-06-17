@@ -54,36 +54,26 @@ func isOnline(endpoint string) bool {
 func (sm *ServerManager) askAllServersHealth() chan *ServerHealthStatus {
     ch := make(chan *ServerHealthStatus)
     wg := sync.WaitGroup{}
-
     for _, srv := range sm.servers {
         wg.Add(1)
         go func(srv Server) {
             defer wg.Done()
             r, err := sm.GetServerHealth(srv, "server-health")
-            if err != nil {
-                s := ServerHealthStatus{
-                    Server: srv,
-                    Health: r,
-                    Online: false,
-                }
-                ch <- &s
-            } else {
-                s := ServerHealthStatus{
-                    Server: srv,
-                    Health: r,
-                    Online: true,
-                }
-                ch <- &s
+            s := ServerHealthStatus{
+                Server: srv,
+                Health: r,
+                Online: err == nil,
             }
+            ch <- &s
         }(*srv)
     }
-
     go func() {
         wg.Wait()
         close(ch)
     }()
     return ch
 }
+
 
 func (sm *ServerManager) GetServersCount() int {
     return len(sm.servers)
