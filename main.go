@@ -32,19 +32,29 @@ var sessions = struct {
     m map[string]*session
 }{m: make(map[string]*session)}
 
-func getSession(ctx *fasthttp.RequestCtx) *session {
+func getSession(ctx *fasthttp.RequestCtx, cookie string) *session {
+    if sessions.m == nil {
+        return nil
+    }
+
+    cookieValue := ctx.Request.Header.Cookie(cookie)
+    if cookieValue == nil || len(cookieValue) == 0 {
+        return nil
+    }
+    
     sessions.RLock()
-    sess, ok := sessions.m[string(ctx.Request.Header.Cookie(appConfig.App.Cookie))]
+    sess, ok := sessions.m[string(cookieValue)]
     sessions.RUnlock()
-    if !ok || sess.expiry.Before(time.Now()) {
+
+    if !ok || sess == nil || sess.expiry.Before(time.Now()) {
         return nil
     }
     return sess
 }
 
-func setSession(ctx *fasthttp.RequestCtx, sess *session) {
+func setSession(ctx *fasthttp.RequestCtx, sess *session, cookie string) {
     sessions.Lock()
-    sessions.m[string(ctx.Request.Header.Cookie(appConfig.App.Cookie))] = sess
+    sessions.m[string(ctx.Request.Header.Cookie(cookie))] = sess
     sessions.Unlock()
 }
 
@@ -196,22 +206,15 @@ func main() {
 
     var current int
     lb := func(ctx *fasthttp.RequestCtx) {
-        cookie := ctx.Request.Header.Cookie(appConfig.App.Cookie)
-        if len(cookie) == 0 {
-            var c fasthttp.Cookie
-	        c.SetKey(appConfig.App.Cookie)
-	        c.SetValue(uuid.New().String())
-            ctx.Response.Header.SetCookie(&c)
-        }
-        realIP := getRealIP(ctx)
+        /* Prepare request */
+        realIP := getRealIP(ctx) 
 		ctx.Request.Header.Set("X-Forwarded-For", realIP)
-        
-        sess := getSession(ctx)
+        sess := getSession(ctx, appConfig.App.Cookie)
         if sess == nil {
             srv := workingServers.GetServerByIndex(current)
             current = (current + 1) % workingServers.GetServersCount()
             sess = &session{server: srv, expiry: time.Now().Add(time.Duration(appConfig.App.SessionLifetime * int(time.Second)))}
-            setSession(ctx, sess)
+            setSession(ctx, sess, appConfig.App.Cookie)
             fmt.Printf("New user using RR balance. Selected server is %s:%s\n", sess.server.Addr, sess.server.Port)
         }
         needLL := false
@@ -231,9 +234,20 @@ func main() {
 		  IsTLS:                  sess.server.Protocol == "https",
 		  ReadBufferSize:         8192,
 	    }
+        
+        /* Do proxy */
         if err := proxyClient.Do(&ctx.Request, &ctx.Response); err != nil {
             ctx.Error(fmt.Sprintf("Internal Server Error: %s", err), fasthttp.StatusInternalServerError)
             return
+        }
+        
+        /* Modify response */
+        cookie := ctx.Request.Header.Cookie(appConfig.App.Cookie)
+        if len(cookie) == 0 {
+            var c fasthttp.Cookie
+	        c.SetKey(appConfig.App.Cookie)
+	        c.SetValue(uuid.New().String())
+            ctx.Response.Header.SetCookie(&c)
         }
     }
     
